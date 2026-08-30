@@ -13,7 +13,6 @@
     --accent: #00ecff;
     --card: #f1c40f;
     --note: #ff9f43;
-    --stop: #ff6b6b;
   }
   * { box-sizing: border-box; }
   body {
@@ -28,30 +27,9 @@
   #controls {
     margin-bottom: 20px; background: #222; padding: 10px 22px;
     border-radius: 30px; border: 1px solid #444;
-    display: flex; flex-wrap: wrap; align-items: center;
-    justify-content: center; gap: 10px 16px; max-width: 1300px;
   }
   #controls label { font-size: 15px; cursor: pointer; font-weight: bold; color: var(--accent); }
   #controls input { cursor: pointer; }
-  #controls .ctrl { display: inline-flex; align-items: center; gap: 6px; }
-  #controls :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  .ctrl-sep { width: 1px; height: 22px; background: #444; }
-
-  #rateSlider { width: 130px; accent-color: var(--accent); }
-  #rateValue {
-    font-size: 14px; color: #bbb; min-width: 44px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  #speakBtn {
-    font-family: inherit; font-size: 15px; font-weight: bold;
-    color: #06333a; background: var(--accent); border: 0;
-    padding: 7px 18px; border-radius: 20px; cursor: pointer;
-    transition: background .15s, color .15s;
-  }
-  #speakBtn:hover { background: #6ef4ff; }
-  #speakBtn.stopping { background: var(--stop); color: #2f0d0d; }
-  #speakBtn:disabled { background: #3a3a3a; color: #888; cursor: not-allowed; }
 
   .container { display: flex; gap: 30px; max-width: 1300px; width: 100%; }
   .left-panel {
@@ -141,27 +119,8 @@
 <div class="subtitle">雀の学校（1922）　作詞：清水かつら／作曲：弘田龍太郎　　Sparrow School — public domain</div>
 
 <div id="controls">
-  <span class="ctrl">
-    <input type="checkbox" id="followCheckbox" checked>
-    <label for="followCheckbox">🎯 跟著影片自動捲動　Follow the video</label>
-  </span>
-
-  <span class="ctrl-sep" aria-hidden="true"></span>
-
-  <span class="ctrl">
-    <label for="rateSlider">🗣️ 語速 Rate</label>
-    <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.05" value="1">
-    <span id="rateValue">1.0x</span>
-  </span>
-
-  <span class="ctrl-sep" aria-hidden="true"></span>
-
-  <span class="ctrl">
-    <input type="checkbox" id="loopCheckbox">
-    <label for="loopCheckbox">🔁 自動循環朗讀　Loop the line</label>
-  </span>
-
-  <button id="speakBtn" type="button">朗讀</button>
+  <input type="checkbox" id="followCheckbox" checked>
+  <label for="followCheckbox">🎯 跟著影片自動捲動　Follow the video</label>
 </div>
 
 <div class="container">
@@ -194,10 +153,6 @@
   const list   = document.getElementById('segments-list');
   const detail = document.getElementById('detail-content');
   const follow = document.getElementById('followCheckbox');
-  const rateSlider = document.getElementById('rateSlider');
-  const rateValue  = document.getElementById('rateValue');
-  const loopChk    = document.getElementById('loopCheckbox');
-  const speakBtn   = document.getElementById('speakBtn');
 
   if (!Array.isArray(data) || !data.length) {
     detail.textContent = '找不到 data.js。請確認它和 index.html 放在同一個資料夾。'
@@ -224,12 +179,7 @@
     row.className = 'segment-item';
     row.tabIndex = 0;
     row.textContent = item.left_list_text;
-    const jump = () => {
-      video.currentTime = item.start_time_sec;
-      select(i);
-      if (loopChk.checked && ttsOK) speakLine();
-      else video.play();
-    };
+    const jump = () => { video.currentTime = item.start_time_sec; video.play(); select(i); };
     row.addEventListener('click', jump);
     row.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); }
@@ -324,14 +274,6 @@
     detail.appendChild(cards);
   }
 
-  // ---- which word is lit up ----------------------------------------------
-  function setChunk(c) {
-    if (c === currentChunk) return;
-    if (cardNodes[currentChunk]) cardNodes[currentChunk].classList.remove('singing');
-    currentChunk = c;
-    if (cardNodes[c]) cardNodes[c].classList.add('singing');
-  }
-
   // ---- follow the video ---------------------------------------------------
   function lineAt(t) {
     for (let i = 0; i < data.length; i++) {
@@ -351,160 +293,12 @@
     for (let k = 0; k < chunks.length; k++) {
       if (t >= chunks[k].time) c = k; else break;
     }
-    if (c !== currentChunk) setChunk(c);
-  });
-
-  // ---- read the current line aloud ---------------------------------------
-  const synth = window.speechSynthesis;
-  const ttsOK = !!synth && typeof window.SpeechSynthesisUtterance === 'function';
-
-  let jaVoice = null;
-  let currentUtterance = null;
-  let loopTimer = null;
-  let speaking = false;
-  let estTimers = [];
-
-  function clearEst() { estTimers.forEach(clearTimeout); estTimers = []; }
-
-  // Where each word card starts inside the spoken line, so a boundary event
-  // can be traced back to a card. Tolerant of spaces and stray punctuation.
-  function chunkOffsets(item) {
-    const line = item.left_list_text;
-    const out = [];
-    let pos = 0;
-    item.right_details_chunks.forEach(ch => {
-      const at = line.indexOf(ch.word, pos);
-      if (at === -1) { out.push(pos); }
-      else { out.push(at); pos = at + ch.word.length; }
-    });
-    return out;
-  }
-
-  function chunkAtChar(offsets, charIndex) {
-    let found = -1;
-    for (let k = 0; k < offsets.length; k++) {
-      if (offsets[k] <= charIndex) found = k; else break;
+    if (c !== currentChunk) {
+      if (cardNodes[currentChunk]) cardNodes[currentChunk].classList.remove('singing');
+      currentChunk = c;
+      if (cardNodes[c]) cardNodes[c].classList.add('singing');
     }
-    return found;
-  }
-
-  // Rough mora count — used only when a voice sends no boundary events.
-  function moraWeight(s) {
-    let w = 0;
-    for (const ch of s) {
-      if ('ゃゅょャュョぁぃぅぇぉァィゥェォ'.indexOf(ch) !== -1) w += 0.5;
-      else if (/[\u4e00-\u9faf]/.test(ch)) w += 2;
-      else w += 1;
-    }
-    return Math.max(w, 1);
-  }
-
-  function pickVoice() {
-    const voices = synth.getVoices() || [];
-    jaVoice = voices.find(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith('ja')) || null;
-  }
-
-  function showRate() {
-    const n = Math.round(parseFloat(rateSlider.value) * 100);
-    rateValue.textContent = (n % 10 === 0 ? (n / 100).toFixed(1) : (n / 100).toFixed(2)) + 'x';
-  }
-
-  function paintButton() {
-    speakBtn.textContent = speaking ? '停止朗讀' : '朗讀';
-    speakBtn.classList.toggle('stopping', speaking);
-  }
-
-  function stopSpeaking() {
-    clearTimeout(loopTimer);
-    clearEst();
-    currentUtterance = null;
-    speaking = false;
-    if (ttsOK) synth.cancel();
-    setChunk(-1);
-    paintButton();
-  }
-
-  function speakLine() {
-    if (!ttsOK) return;
-    if (currentIndex < 0) select(0);
-    if (currentIndex < 0) return;
-
-    clearTimeout(loopTimer);
-    clearEst();
-    currentUtterance = null;
-    synth.cancel();
-    if (!video.paused) video.pause();   // keep the video and the voice from talking over each other
-
-    const item = data[currentIndex];
-    const chunks = item.right_details_chunks;
-    const offsets = chunkOffsets(item);
-    let boundarySeen = false;
-
-    const u = new SpeechSynthesisUtterance(item.left_list_text);
-    u.lang = 'ja-JP';
-    if (jaVoice) u.voice = jaVoice;
-    u.rate = parseFloat(rateSlider.value) || 1;
-
-    u.onstart = () => {
-      if (u !== currentUtterance) return;
-      setChunk(0);
-      // Some voices never report word boundaries. Arm an estimated schedule as
-      // a backup; the first real boundary event cancels it.
-      let acc = 0;
-      chunks.forEach((ch, k) => {
-        acc += moraWeight(ch.furigana || ch.word) * 165 / u.rate;
-        if (k + 1 < chunks.length) {
-          estTimers.push(setTimeout(() => {
-            if (!boundarySeen && u === currentUtterance) setChunk(k + 1);
-          }, acc));
-        }
-      });
-    };
-
-    u.onboundary = e => {
-      if (u !== currentUtterance) return;
-      boundarySeen = true;
-      clearEst();
-      const k = chunkAtChar(offsets, e.charIndex);
-      if (k >= 0) setChunk(k);
-    };
-
-    u.onend = () => {
-      if (u !== currentUtterance) return;      // an older utterance we already cancelled
-      clearEst();
-      setChunk(-1);
-      if (loopChk.checked) loopTimer = setTimeout(speakLine, 800);
-      else stopSpeaking();
-    };
-    u.onerror = () => { if (u === currentUtterance) stopSpeaking(); };
-
-    currentUtterance = u;
-    speaking = true;
-    paintButton();
-    synth.speak(u);
-  }
-
-  showRate();
-  rateSlider.addEventListener('input', showRate);
-  rateSlider.addEventListener('change', () => { if (speaking) speakLine(); });
-
-  loopChk.addEventListener('change', () => {
-    if (loopChk.checked) { if (!speaking) speakLine(); }
-    else clearTimeout(loopTimer);   // the line in progress finishes, then it stops
   });
-
-  speakBtn.addEventListener('click', () => { speaking ? stopSpeaking() : speakLine(); });
-  video.addEventListener('play', stopSpeaking);
-  window.addEventListener('beforeunload', () => { if (ttsOK) synth.cancel(); });
-
-  if (ttsOK) {
-    pickVoice();
-    synth.onvoiceschanged = pickVoice;
-  } else {
-    speakBtn.disabled = true;
-    loopChk.disabled = true;
-    speakBtn.title = '這個瀏覽器不支援朗讀 / This browser has no speech synthesis.';
-  }
 })();
 </script>
 </body>
