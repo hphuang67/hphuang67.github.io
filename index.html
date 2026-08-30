@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日文影片線下自主學習工具 — 雀の学校</title>
+<style>
+  :root {
+    --bg: #111111;
+    --panel: #1e1e1e;
+    --raised: #2a2a2a;
+    --line: #333333;
+    --accent: #00ecff;
+    --card: #f1c40f;
+    --note: #ff9f43;
+    --stop: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Meiryo, sans-serif;
+    margin: 0; padding: 20px;
+    background: var(--bg); color: #fff;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { color: var(--accent); font-size: 28px; margin: 0 0 6px; text-align: center; }
+  .subtitle { color: #777; font-size: 14px; margin-bottom: 18px; text-align: center; }
+
+  #controls {
+    margin-bottom: 20px; background: #222; padding: 10px 22px;
+    border-radius: 30px; border: 1px solid #444;
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: center; gap: 10px 16px; max-width: 1300px;
+  }
+  #controls label { font-size: 15px; cursor: pointer; font-weight: bold; color: var(--accent); }
+  #controls input { cursor: pointer; }
+  #controls .ctrl { display: inline-flex; align-items: center; gap: 6px; }
+  #controls :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .ctrl-sep { width: 1px; height: 22px; background: #444; }
+
+  #rateSlider { width: 130px; accent-color: var(--accent); }
+  #rateValue {
+    font-size: 14px; color: #bbb; min-width: 44px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #speakBtn {
+    font-family: inherit; font-size: 15px; font-weight: bold;
+    color: #06333a; background: var(--accent); border: 0;
+    padding: 7px 18px; border-radius: 20px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  #speakBtn:hover { background: #6ef4ff; }
+  #speakBtn.stopping { background: var(--stop); color: #2f0d0d; }
+  #speakBtn:disabled { background: #3a3a3a; color: #888; cursor: not-allowed; }
+
+  .container { display: flex; gap: 30px; max-width: 1300px; width: 100%; }
+  .left-panel {
+    flex: 1; background: var(--panel); padding: 20px; border-radius: 12px;
+    border: 1px solid var(--line); max-height: 75vh; overflow-y: auto;
+  }
+  .left-panel h3 { margin: 0 0 10px; color: #bbb; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+  .right-panel { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
+
+  video { width: 100%; border-radius: 12px; background: #000; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+
+  .verse-head {
+    color: #666; font-size: 13px; letter-spacing: .18em; margin: 22px 0 8px;
+  }
+  .verse-head:first-child { margin-top: 0; }
+
+  .segment-item {
+    padding: 13px 15px; margin-bottom: 10px; background: var(--raised);
+    border: 1px solid #444; border-left: 4px solid transparent; border-radius: 8px;
+    cursor: pointer; font-size: 19px; font-weight: bold; color: #fff;
+    transition: background .18s, border-color .18s, color .18s;
+  }
+  .segment-item:hover { background: #3a3a3a; border-color: var(--accent); }
+  .segment-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .segment-item.active {
+    background: #06333a; border-color: var(--accent);
+    border-left-color: var(--accent); color: var(--accent);
+  }
+
+  .detail-box {
+    background: var(--panel); padding: 25px; border-radius: 12px;
+    border: 1px solid var(--line); min-height: 250px;
+  }
+  .translation-text { font-size: 27px; color: #ddd; line-height: 1.5; }
+  .text-en { font-size: 20px; color: var(--accent); margin-top: 6px; }
+  .note-box {
+    margin-top: 14px; padding: 10px 16px; border-left: 3px solid var(--note);
+    background: #241d13; color: #e8c9a0; font-size: 16px; line-height: 1.6; border-radius: 4px;
+  }
+
+  .cards-container {
+    margin-top: 25px; display: flex; flex-wrap: wrap;
+    gap: 18px; justify-content: center; align-items: flex-start;
+  }
+  .card-wrap { text-align: center; width: 150px; }
+
+  .chunk-card {
+    display: inline-block; background: var(--card); color: #000;
+    padding: 10px 18px; border-radius: 16px;
+    font-size: 34px; font-weight: bold; line-height: 1.25;
+    box-shadow: 0 6px 12px rgba(0,0,0,.3); cursor: pointer;
+    transition: transform .15s, box-shadow .15s, background .15s;
+  }
+  .chunk-card:hover { background: #f6d354; }
+  .chunk-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .chunk-card.singing {
+    background: #ffffff;
+    transform: translateY(-6px) scale(1.06);
+    box-shadow: 0 12px 22px rgba(0,236,255,.5);
+  }
+  .chunk-card rt { font-size: 16px; color: #2c3e50; font-weight: bold; padding-bottom: 3px; }
+
+  .gloss {
+    margin-top: 8px; background: var(--raised); padding: 8px 10px;
+    border-radius: 8px; border: 1px solid #444; line-height: 1.45;
+  }
+  .gloss .zh { font-size: 17px; color: #eee; }
+  .gloss .en { font-size: 15px; color: var(--accent); margin-top: 3px; }
+
+  #placeholder { font-size: 21px; color: #888; line-height: 1.7; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    .chunk-card.singing { transform: none; }
+  }
+  @media (max-width: 900px) {
+    .container { flex-direction: column; }
+    .left-panel { max-height: 40vh; }
+    .chunk-card { font-size: 27px; padding: 8px 14px; }
+    .card-wrap { width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>日文影片線下自主學習工具</h1>
+<div class="subtitle">雀の学校（1922）　作詞：清水かつら／作曲：弘田龍太郎　　Sparrow School — public domain</div>
+
+<div id="controls">
+  <span class="ctrl">
+    <input type="checkbox" id="followCheckbox" checked>
+    <label for="followCheckbox">🎯 跟著影片自動捲動　Follow the video</label>
+  </span>
+
+  <span class="ctrl-sep" aria-hidden="true"></span>
+
+  <span class="ctrl">
+    <label for="rateSlider">🗣️ 語速 Rate</label>
+    <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.05" value="1">
+    <span id="rateValue">1.0x</span>
+  </span>
+
+  <span class="ctrl-sep" aria-hidden="true"></span>
+
+  <span class="ctrl">
+    <input type="checkbox" id="loopCheckbox">
+    <label for="loopCheckbox">🔁 自動循環朗讀　Loop the line</label>
+  </span>
+
+  <button id="speakBtn" type="button">朗讀</button>
+</div>
+
+<div class="container">
+  <div class="left-panel">
+    <h3>逐句歌詞（點擊跳到該句）　Tap a line to jump</h3>
+    <div id="segments-list"></div>
+  </div>
+
+  <div class="right-panel">
+    <video id="mainVideo" controls playsinline>
+      <source src="video.mp4" type="video/mp4">
+      這個瀏覽器無法播放這個影片檔。
+    </video>
+    <div class="detail-box">
+      <div id="detail-content">
+        <div id="placeholder">
+          按下播放，左邊的歌詞會自己亮起來，正在唱的那個詞也會跳出來。<br>
+          Press play — the current line lights up on the left and the word being sung pops out below.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  const data   = window.audiA5Data;
+  const video  = document.getElementById('mainVideo');
+  const list   = document.getElementById('segments-list');
+  const detail = document.getElementById('detail-content');
+  const follow = document.getElementById('followCheckbox');
+  const rateSlider = document.getElementById('rateSlider');
+  const rateValue  = document.getElementById('rateValue');
+  const loopChk    = document.getElementById('loopCheckbox');
+  const speakBtn   = document.getElementById('speakBtn');
+
+  if (!Array.isArray(data) || !data.length) {
+    detail.textContent = '找不到 data.js。請確認它和 index.html 放在同一個資料夾。'
+                       + ' / data.js not found — keep it in the same folder as index.html.';
+    return;
+  }
+
+  const rows = [];
+  let currentIndex = -1;
+  let currentChunk = -1;
+  let cardNodes = [];
+
+  // ---- left-hand list, grouped by verse ----------------------------------
+  let lastVerse = null;
+  data.forEach((item, i) => {
+    if (item.verse !== lastVerse) {
+      lastVerse = item.verse;
+      const h = document.createElement('div');
+      h.className = 'verse-head';
+      h.textContent = '第 ' + item.verse + ' 段  /  Verse ' + item.verse;
+      list.appendChild(h);
+    }
+    const row = document.createElement('div');
+    row.className = 'segment-item';
+    row.tabIndex = 0;
+    row.textContent = item.left_list_text;
+    const jump = () => {
+      video.currentTime = item.start_time_sec;
+      select(i);
+      if (loopChk.checked && ttsOK) speakLine();
+      else video.play();
+    };
+    row.addEventListener('click', jump);
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); }
+    });
+    list.appendChild(row);
+    rows[i] = row;
+  });
+
+  // ---- right-hand detail --------------------------------------------------
+  function select(i) {
+    if (i === currentIndex) return;
+    if (rows[currentIndex]) rows[currentIndex].classList.remove('active');
+    currentIndex = i;
+    currentChunk = -1;
+    if (i < 0) return;
+    rows[i].classList.add('active');
+    if (follow.checked) rows[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    render(data[i]);
+  }
+
+  function render(item) {
+    detail.innerHTML = '';
+    cardNodes = [];
+
+    const trans = document.createElement('div');
+    trans.className = 'translation-text';
+
+    const zh = document.createElement('div');
+    zh.textContent = '中文：' + item.translation_zh;
+    trans.appendChild(zh);
+
+    const en = document.createElement('div');
+    en.className = 'text-en';
+    en.textContent = 'English: ' + item.translation_en;
+    trans.appendChild(en);
+    detail.appendChild(trans);
+
+    if (item.note) {
+      const n = document.createElement('div');
+      n.className = 'note-box';
+      n.textContent = item.note;
+      detail.appendChild(n);
+    }
+
+    const cards = document.createElement('div');
+    cards.className = 'cards-container';
+
+    item.right_details_chunks.forEach(chunk => {
+      const wrap = document.createElement('div');
+      wrap.className = 'card-wrap';
+
+      const ruby = document.createElement('ruby');
+      ruby.className = 'chunk-card';
+      ruby.tabIndex = 0;
+      // furigana only when it adds something the word doesn't already show
+      if (chunk.furigana && chunk.furigana !== chunk.word) {
+        ruby.appendChild(document.createTextNode(chunk.word));
+        const rt = document.createElement('rt');
+        rt.textContent = chunk.furigana;
+        ruby.appendChild(rt);
+      } else {
+        ruby.textContent = chunk.word;
+      }
+
+      const seek = e => {
+        e.stopPropagation();
+        video.currentTime = (typeof chunk.time === 'number') ? chunk.time : item.start_time_sec;
+        video.play();
+      };
+      ruby.addEventListener('click', seek);
+      ruby.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seek(e); }
+      });
+      wrap.appendChild(ruby);
+      cardNodes.push(ruby);
+
+      const gloss = document.createElement('div');
+      gloss.className = 'gloss';
+      const gz = document.createElement('div');
+      gz.className = 'zh';
+      gz.textContent = chunk.zh;
+      const ge = document.createElement('div');
+      ge.className = 'en';
+      ge.textContent = chunk.en;
+      gloss.appendChild(gz);
+      gloss.appendChild(ge);
+      wrap.appendChild(gloss);
+
+      cards.appendChild(wrap);
+    });
+
+    detail.appendChild(cards);
+  }
+
+  // ---- which word is lit up ----------------------------------------------
+  function setChunk(c) {
+    if (c === currentChunk) return;
+    if (cardNodes[currentChunk]) cardNodes[currentChunk].classList.remove('singing');
+    currentChunk = c;
+    if (cardNodes[c]) cardNodes[c].classList.add('singing');
+  }
+
+  // ---- follow the video ---------------------------------------------------
+  function lineAt(t) {
+    for (let i = 0; i < data.length; i++) {
+      if (t >= data[i].start_time_sec && t < data[i].end_time_sec) return i;
+    }
+    return -1;
+  }
+
+  video.addEventListener('timeupdate', () => {
+    const t = video.currentTime;
+    const i = lineAt(t);
+    if (i !== -1 && i !== currentIndex) select(i);
+    if (currentIndex === -1) return;
+
+    const chunks = data[currentIndex].right_details_chunks;
+    let c = -1;
+    for (let k = 0; k < chunks.length; k++) {
+      if (t >= chunks[k].time) c = k; else break;
+    }
+    if (c !== currentChunk) setChunk(c);
+  });
+
+  // ---- read the current line aloud ---------------------------------------
+  const synth = window.speechSynthesis;
+  const ttsOK = !!synth && typeof window.SpeechSynthesisUtterance === 'function';
+
+  let jaVoice = null;
+  let currentUtterance = null;
+  let loopTimer = null;
+  let speaking = false;
+  let estTimers = [];
+
+  function clearEst() { estTimers.forEach(clearTimeout); estTimers = []; }
+
+  // Where each word card starts inside the spoken line, so a boundary event
+  // can be traced back to a card. Tolerant of spaces and stray punctuation.
+  function chunkOffsets(item) {
+    const line = item.left_list_text;
+    const out = [];
+    let pos = 0;
+    item.right_details_chunks.forEach(ch => {
+      const at = line.indexOf(ch.word, pos);
+      if (at === -1) { out.push(pos); }
+      else { out.push(at); pos = at + ch.word.length; }
+    });
+    return out;
+  }
+
+  function chunkAtChar(offsets, charIndex) {
+    let found = -1;
+    for (let k = 0; k < offsets.length; k++) {
+      if (offsets[k] <= charIndex) found = k; else break;
+    }
+    return found;
+  }
+
+  // Rough mora count — used only when a voice sends no boundary events.
+  function moraWeight(s) {
+    let w = 0;
+    for (const ch of s) {
+      if ('ゃゅょャュョぁぃぅぇぉァィゥェォ'.indexOf(ch) !== -1) w += 0.5;
+      else if (/[\u4e00-\u9faf]/.test(ch)) w += 2;
+      else w += 1;
+    }
+    return Math.max(w, 1);
+  }
+
+  function pickVoice() {
+    const voices = synth.getVoices() || [];
+    jaVoice = voices.find(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith('ja')) || null;
+  }
+
+  function showRate() {
+    const n = Math.round(parseFloat(rateSlider.value) * 100);
+    rateValue.textContent = (n % 10 === 0 ? (n / 100).toFixed(1) : (n / 100).toFixed(2)) + 'x';
+  }
+
+  function paintButton() {
+    speakBtn.textContent = speaking ? '停止朗讀' : '朗讀';
+    speakBtn.classList.toggle('stopping', speaking);
+  }
+
+  function stopSpeaking() {
+    clearTimeout(loopTimer);
+    clearEst();
+    currentUtterance = null;
+    speaking = false;
+    if (ttsOK) synth.cancel();
+    setChunk(-1);
+    paintButton();
+  }
+
+  function speakLine() {
+    if (!ttsOK) return;
+    if (currentIndex < 0) select(0);
+    if (currentIndex < 0) return;
+
+    clearTimeout(loopTimer);
+    clearEst();
+    currentUtterance = null;
+    synth.cancel();
+    if (!video.paused) video.pause();   // keep the video and the voice from talking over each other
+
+    const item = data[currentIndex];
+    const chunks = item.right_details_chunks;
+    const offsets = chunkOffsets(item);
+    let boundarySeen = false;
+
+    const u = new SpeechSynthesisUtterance(item.left_list_text);
+    u.lang = 'ja-JP';
+    if (jaVoice) u.voice = jaVoice;
+    u.rate = parseFloat(rateSlider.value) || 1;
+
+    u.onstart = () => {
+      if (u !== currentUtterance) return;
+      setChunk(0);
+      // Some voices never report word boundaries. Arm an estimated schedule as
+      // a backup; the first real boundary event cancels it.
+      let acc = 0;
+      chunks.forEach((ch, k) => {
+        acc += moraWeight(ch.furigana || ch.word) * 165 / u.rate;
+        if (k + 1 < chunks.length) {
+          estTimers.push(setTimeout(() => {
+            if (!boundarySeen && u === currentUtterance) setChunk(k + 1);
+          }, acc));
+        }
+      });
+    };
+
+    u.onboundary = e => {
+      if (u !== currentUtterance) return;
+      boundarySeen = true;
+      clearEst();
+      const k = chunkAtChar(offsets, e.charIndex);
+      if (k >= 0) setChunk(k);
+    };
+
+    u.onend = () => {
+      if (u !== currentUtterance) return;      // an older utterance we already cancelled
+      clearEst();
+      setChunk(-1);
+      if (loopChk.checked) loopTimer = setTimeout(speakLine, 800);
+      else stopSpeaking();
+    };
+    u.onerror = () => { if (u === currentUtterance) stopSpeaking(); };
+
+    currentUtterance = u;
+    speaking = true;
+    paintButton();
+    synth.speak(u);
+  }
+
+  showRate();
+  rateSlider.addEventListener('input', showRate);
+  rateSlider.addEventListener('change', () => { if (speaking) speakLine(); });
+
+  loopChk.addEventListener('change', () => {
+    if (loopChk.checked) { if (!speaking) speakLine(); }
+    else clearTimeout(loopTimer);   // the line in progress finishes, then it stops
+  });
+
+  speakBtn.addEventListener('click', () => { speaking ? stopSpeaking() : speakLine(); });
+  video.addEventListener('play', stopSpeaking);
+  window.addEventListener('beforeunload', () => { if (ttsOK) synth.cancel(); });
+
+  if (ttsOK) {
+    pickVoice();
+    synth.onvoiceschanged = pickVoice;
+  } else {
+    speakBtn.disabled = true;
+    loopChk.disabled = true;
+    speakBtn.title = '這個瀏覽器不支援朗讀 / This browser has no speech synthesis.';
+  }
+})();
+</script>
+</body>
+</html>
