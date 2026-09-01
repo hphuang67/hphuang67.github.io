@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>日文影片線下自主學習工具 — 雀の学校</title>
 <style>
   :root {
@@ -13,6 +14,7 @@
     --accent: #00ecff;
     --card: #f1c40f;
     --note: #ff9f43;
+    --stop: #ff6b6b;
   }
   * { box-sizing: border-box; }
   body {
@@ -22,14 +24,37 @@
     display: flex; flex-direction: column; align-items: center;
   }
   h1 { color: var(--accent); font-size: 28px; margin: 0 0 6px; text-align: center; }
-  .subtitle { color: #777; font-size: 14px; margin-bottom: 18px; text-align: center; }
+  .subtitle { color: #777; font-size: 14px; margin-bottom: 18px; text-align: center; line-height: 1.7; }
+  .subtitle a { color: #6b8f96; text-decoration: none; border-bottom: 1px solid #3a4a4d; }
+  .subtitle a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
   #controls {
     margin-bottom: 20px; background: #222; padding: 10px 22px;
     border-radius: 30px; border: 1px solid #444;
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: center; gap: 10px 16px; max-width: 1300px;
   }
   #controls label { font-size: 15px; cursor: pointer; font-weight: bold; color: var(--accent); }
   #controls input { cursor: pointer; }
+  #controls .ctrl { display: inline-flex; align-items: center; gap: 6px; }
+  #controls :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .ctrl-sep { width: 1px; height: 22px; background: #444; }
+
+  #rateSlider { width: 130px; accent-color: var(--accent); }
+  #rateValue {
+    font-size: 14px; color: #bbb; min-width: 44px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #speakBtn {
+    font-family: inherit; font-size: 15px; font-weight: bold;
+    color: #06333a; background: var(--accent); border: 0;
+    padding: 7px 18px; border-radius: 20px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  #speakBtn:hover { background: #6ef4ff; }
+  #speakBtn.stopping { background: var(--stop); color: #2f0d0d; }
+  #speakBtn:disabled { background: #3a3a3a; color: #888; cursor: not-allowed; }
 
   .container { display: flex; gap: 30px; max-width: 1300px; width: 100%; }
   .left-panel {
@@ -39,7 +64,16 @@
   .left-panel h3 { margin: 0 0 10px; color: #bbb; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
   .right-panel { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
 
-  video { width: 100%; border-radius: 12px; background: #000; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+  .player-wrap {
+    position: relative; width: 100%; aspect-ratio: 16 / 9;
+    border-radius: 12px; overflow: hidden; background: #000;
+    box-shadow: 0 8px 24px rgba(0,0,0,.6);
+  }
+  .player-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  #playerFallback {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 20px; text-align: center; color: #888; font-size: 16px; line-height: 1.6;
+  }
 
   .verse-head {
     color: #666; font-size: 13px; letter-spacing: .18em; margin: 22px 0 8px;
@@ -101,6 +135,20 @@
 
   #placeholder { font-size: 21px; color: #888; line-height: 1.7; }
 
+  #playerFallback code {
+    background: #2a2a2a; color: var(--accent); padding: 2px 7px;
+    border-radius: 5px; font-size: 14px; user-select: all;
+  }
+
+  .credits {
+    max-width: 1300px; width: 100%; margin: 30px 0 10px;
+    padding-top: 18px; border-top: 1px solid var(--line);
+    color: #6d6d6d; font-size: 13px; line-height: 1.8;
+  }
+  .credits p { margin: 0 0 10px; }
+  .credits a { color: #6b8f96; }
+  .credits a:hover { color: var(--accent); }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
     .chunk-card.singing { transform: none; }
@@ -115,12 +163,34 @@
 </head>
 <body>
 
-<h1>日文影片線下自主學習工具</h1>
-<div class="subtitle">雀の学校（1922）　作詞：清水かつら／作曲：弘田龍太郎　　Sparrow School — public domain</div>
+<h1>日文影片自主學習工具</h1>
+<div class="subtitle">
+  東京駅から歩いて行ける　八重洲・丸の内 歴史散歩　—　逐句中文・English 對照<br>
+  影片與英文字幕來源：<a href="https://www.youtube.com/watch?v=SfwBGqY4Q_Q" target="_blank" rel="noopener">YouTube 原片</a>
+</div>
 
 <div id="controls">
-  <input type="checkbox" id="followCheckbox" checked>
-  <label for="followCheckbox">🎯 跟著影片自動捲動　Follow the video</label>
+  <span class="ctrl">
+    <input type="checkbox" id="followCheckbox" checked>
+    <label for="followCheckbox">🎯 跟著影片自動捲動　Follow the video</label>
+  </span>
+
+  <span class="ctrl-sep" aria-hidden="true"></span>
+
+  <span class="ctrl">
+    <label for="rateSlider">🗣️ 語速 Rate</label>
+    <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.05" value="1">
+    <span id="rateValue">1.0x</span>
+  </span>
+
+  <span class="ctrl-sep" aria-hidden="true"></span>
+
+  <span class="ctrl">
+    <input type="checkbox" id="loopCheckbox">
+    <label for="loopCheckbox">🔁 自動循環朗讀　Loop the line</label>
+  </span>
+
+  <button id="speakBtn" type="button">朗讀</button>
 </div>
 
 <div class="container">
@@ -130,10 +200,13 @@
   </div>
 
   <div class="right-panel">
-    <video id="mainVideo" controls playsinline>
-      <source src="video.mp4" type="video/mp4">
-      這個瀏覽器無法播放這個影片檔。
-    </video>
+    <div class="player-wrap">
+      <div id="player"></div>
+      <div id="playerFallback">
+        無法載入 YouTube 播放器。請確認網路連線，並用本機伺服器開啟本頁。<br>
+        Could not load the YouTube player — check your connection, and serve this page over http.
+      </div>
+    </div>
     <div class="detail-box">
       <div id="detail-content">
         <div id="placeholder">
@@ -145,14 +218,120 @@
   </div>
 </div>
 
+<!-- 請把下面的「（頻道名稱）」換成影片頁面上的頻道名稱。
+     Replace （頻道名稱） below with the channel name shown on the video page. -->
+<footer class="credits">
+  <p>
+    影片與英文字幕：<a href="https://www.youtube.com/watch?v=SfwBGqY4Q_Q" target="_blank" rel="noopener">東京駅から歩いて行ける　八重洲・丸の内 歴史散歩</a>（頻道名稱）。
+    影片以 YouTube 官方嵌入方式播放，本頁不儲存任何影音檔；英文翻譯直接取自該影片自帶的英文字幕，著作權屬原作者所有。<br>
+    Video and English subtitles are the work of the original creator, used here via YouTube's official embed. No media files are hosted on this page.
+  </p>
+  <p>
+    日文逐句文字取自該影片的自動字幕，並已校正明顯的辨識錯誤（校正處以 ⚠ 標示）；中文翻譯、逐詞註解與本頁程式為本學習工具另行編寫，僅供個人語言學習使用。<br>
+    Japanese text comes from the video's auto-captions with recognition errors corrected; the Chinese translations, word notes and this page were written for this study tool, for personal language learning.
+  </p>
+</footer>
+
 <script src="data.js"></script>
 <script>
 (function () {
   const data   = window.audiA5Data;
-  const video  = document.getElementById('mainVideo');
+  const VIDEO_ID = 'SfwBGqY4Q_Q';
+
+  // The rest of this file talks to `video` exactly as it did when the source
+  // was a local <video> element. This adapter keeps that interface and
+  // forwards it to the YouTube IFrame API.
+  let yt = null;
+  const video = {
+    get currentTime() {
+      return (yt && yt.getCurrentTime) ? yt.getCurrentTime() : 0;
+    },
+    set currentTime(t) {
+      if (yt && yt.seekTo) yt.seekTo(t, true);
+    },
+    get paused() {
+      if (!yt || !yt.getPlayerState) return true;
+      return yt.getPlayerState() !== 1;   // 1 = PLAYING
+    },
+    play()  { if (yt && yt.playVideo)  yt.playVideo(); },
+    pause() { if (yt && yt.pauseVideo) yt.pauseVideo(); }
+  };
+
+  function showFallback(msg) {
+    const f = document.getElementById('playerFallback');
+    if (!f) return;
+    f.innerHTML = msg;
+    f.style.display = 'flex';
+  }
+
+  window.onYouTubeIframeAPIReady = function () {
+    const slot = document.getElementById('player');
+    if (!slot) return;
+
+    const params = new URLSearchParams({
+      enablejsapi: '1', rel: '0', playsinline: '1', modestbranding: '1'
+    });
+    // origin only means anything over http(s); on a file:// page it is "null"
+    if (location.origin && location.origin !== 'null') {
+      params.set('origin', location.origin);
+    }
+
+    // Built by hand rather than by the API, so it can carry referrerpolicy —
+    // without it YouTube rejects the embed with error 153.
+    const frame = document.createElement('iframe');
+    frame.id = 'player';
+    frame.title = '影片 / video';
+    frame.src = 'https://www.youtube-nocookie.com/embed/' + VIDEO_ID + '?' + params.toString();
+    frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    frame.setAttribute('allow',
+      'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen');
+    frame.setAttribute('allowfullscreen', '');
+    slot.replaceWith(frame);
+
+    yt = new YT.Player(frame, {
+      events: {
+        onStateChange: e => { if (e.data === 1) stopSpeaking(); },
+        onError: e => {
+          const why = (e.data === 101 || e.data === 150)
+            ? '影片擁有者停用了嵌入播放。 The owner has disabled embedding.'
+            : (e.data === 100
+                ? '找不到這支影片。 Video not found.'
+                : '請改用本機伺服器開啟本頁（見說明）。 Serve this page over http rather than opening the file directly.');
+          showFallback('YouTube 播放器錯誤 ' + e.data + '<br>' + why);
+        }
+      }
+    });
+  };
+
+  (function loadAPI() {
+    // A file:// page has no origin and sends no Referer, which YouTube rejects
+    // with error 153. No markup can fix that — the page has to be served.
+    if (location.protocol === 'file:') {
+      showFallback(
+        '這個頁面是用 <code>file://</code> 直接開啟的，YouTube 會拒絕播放（錯誤 153）。<br>' +
+        '請在這個資料夾執行 <code>python3 -m http.server 8000</code>，<br>' +
+        '再開啟 <code>http://localhost:8000</code>。<br><br>' +
+        'This page was opened directly from disk, so YouTube refuses to play it.<br>' +
+        'Serve the folder over http and open it via localhost instead.'
+      );
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = () => showFallback(
+      '無法載入 YouTube 播放器，請確認網路連線。<br>' +
+      'Could not load the YouTube player — check your connection.'
+    );
+    document.head.appendChild(s);
+  })();
+
   const list   = document.getElementById('segments-list');
   const detail = document.getElementById('detail-content');
   const follow = document.getElementById('followCheckbox');
+  const rateSlider = document.getElementById('rateSlider');
+  const rateValue  = document.getElementById('rateValue');
+  const loopChk    = document.getElementById('loopCheckbox');
+  const speakBtn   = document.getElementById('speakBtn');
 
   if (!Array.isArray(data) || !data.length) {
     detail.textContent = '找不到 data.js。請確認它和 index.html 放在同一個資料夾。'
@@ -179,7 +358,12 @@
     row.className = 'segment-item';
     row.tabIndex = 0;
     row.textContent = item.left_list_text;
-    const jump = () => { video.currentTime = item.start_time_sec; video.play(); select(i); };
+    const jump = () => {
+      video.currentTime = item.start_time_sec;
+      select(i);
+      if (loopChk.checked && ttsOK) speakLine();
+      else video.play();
+    };
     row.addEventListener('click', jump);
     row.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); }
@@ -274,6 +458,14 @@
     detail.appendChild(cards);
   }
 
+  // ---- which word is lit up ----------------------------------------------
+  function setChunk(c) {
+    if (c === currentChunk) return;
+    if (cardNodes[currentChunk]) cardNodes[currentChunk].classList.remove('singing');
+    currentChunk = c;
+    if (cardNodes[c]) cardNodes[c].classList.add('singing');
+  }
+
   // ---- follow the video ---------------------------------------------------
   function lineAt(t) {
     for (let i = 0; i < data.length; i++) {
@@ -282,7 +474,10 @@
     return -1;
   }
 
-  video.addEventListener('timeupdate', () => {
+  // The IFrame API has no timeupdate event, so poll instead. 100ms is fine
+  // for word-level highlighting and costs nothing while paused.
+  function follow_tick() {
+    if (video.paused) return;
     const t = video.currentTime;
     const i = lineAt(t);
     if (i !== -1 && i !== currentIndex) select(i);
@@ -293,12 +488,161 @@
     for (let k = 0; k < chunks.length; k++) {
       if (t >= chunks[k].time) c = k; else break;
     }
-    if (c !== currentChunk) {
-      if (cardNodes[currentChunk]) cardNodes[currentChunk].classList.remove('singing');
-      currentChunk = c;
-      if (cardNodes[c]) cardNodes[c].classList.add('singing');
+    if (c !== currentChunk) setChunk(c);
+  }
+
+  setInterval(follow_tick, 100);
+
+  // ---- read the current line aloud ---------------------------------------
+  const synth = window.speechSynthesis;
+  const ttsOK = !!synth && typeof window.SpeechSynthesisUtterance === 'function';
+
+  let jaVoice = null;
+  let currentUtterance = null;
+  let loopTimer = null;
+  let speaking = false;
+  let estTimers = [];
+
+  function clearEst() { estTimers.forEach(clearTimeout); estTimers = []; }
+
+  // Where each word card starts inside the spoken line, so a boundary event
+  // can be traced back to a card. Tolerant of spaces and stray punctuation.
+  function chunkOffsets(item) {
+    const line = item.left_list_text;
+    const out = [];
+    let pos = 0;
+    item.right_details_chunks.forEach(ch => {
+      const at = line.indexOf(ch.word, pos);
+      if (at === -1) { out.push(pos); }
+      else { out.push(at); pos = at + ch.word.length; }
+    });
+    return out;
+  }
+
+  function chunkAtChar(offsets, charIndex) {
+    let found = -1;
+    for (let k = 0; k < offsets.length; k++) {
+      if (offsets[k] <= charIndex) found = k; else break;
     }
+    return found;
+  }
+
+  // Rough mora count — used only when a voice sends no boundary events.
+  function moraWeight(s) {
+    let w = 0;
+    for (const ch of s) {
+      if ('ゃゅょャュョぁぃぅぇぉァィゥェォ'.indexOf(ch) !== -1) w += 0.5;
+      else if (/[\u4e00-\u9faf]/.test(ch)) w += 2;
+      else w += 1;
+    }
+    return Math.max(w, 1);
+  }
+
+  function pickVoice() {
+    const voices = synth.getVoices() || [];
+    jaVoice = voices.find(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith('ja')) || null;
+  }
+
+  function showRate() {
+    const n = Math.round(parseFloat(rateSlider.value) * 100);
+    rateValue.textContent = (n % 10 === 0 ? (n / 100).toFixed(1) : (n / 100).toFixed(2)) + 'x';
+  }
+
+  function paintButton() {
+    speakBtn.textContent = speaking ? '停止朗讀' : '朗讀';
+    speakBtn.classList.toggle('stopping', speaking);
+  }
+
+  function stopSpeaking() {
+    clearTimeout(loopTimer);
+    clearEst();
+    currentUtterance = null;
+    speaking = false;
+    if (ttsOK) synth.cancel();
+    setChunk(-1);
+    paintButton();
+  }
+
+  function speakLine() {
+    if (!ttsOK) return;
+    if (currentIndex < 0) select(0);
+    if (currentIndex < 0) return;
+
+    clearTimeout(loopTimer);
+    clearEst();
+    currentUtterance = null;
+    synth.cancel();
+    if (!video.paused) video.pause();   // keep the video and the voice from talking over each other
+
+    const item = data[currentIndex];
+    const chunks = item.right_details_chunks;
+    const offsets = chunkOffsets(item);
+    let boundarySeen = false;
+
+    const u = new SpeechSynthesisUtterance(item.left_list_text);
+    u.lang = 'ja-JP';
+    if (jaVoice) u.voice = jaVoice;
+    u.rate = parseFloat(rateSlider.value) || 1;
+
+    u.onstart = () => {
+      if (u !== currentUtterance) return;
+      setChunk(0);
+      // Some voices never report word boundaries. Arm an estimated schedule as
+      // a backup; the first real boundary event cancels it.
+      let acc = 0;
+      chunks.forEach((ch, k) => {
+        acc += moraWeight(ch.furigana || ch.word) * 165 / u.rate;
+        if (k + 1 < chunks.length) {
+          estTimers.push(setTimeout(() => {
+            if (!boundarySeen && u === currentUtterance) setChunk(k + 1);
+          }, acc));
+        }
+      });
+    };
+
+    u.onboundary = e => {
+      if (u !== currentUtterance) return;
+      boundarySeen = true;
+      clearEst();
+      const k = chunkAtChar(offsets, e.charIndex);
+      if (k >= 0) setChunk(k);
+    };
+
+    u.onend = () => {
+      if (u !== currentUtterance) return;      // an older utterance we already cancelled
+      clearEst();
+      setChunk(-1);
+      if (loopChk.checked) loopTimer = setTimeout(speakLine, 800);
+      else stopSpeaking();
+    };
+    u.onerror = () => { if (u === currentUtterance) stopSpeaking(); };
+
+    currentUtterance = u;
+    speaking = true;
+    paintButton();
+    synth.speak(u);
+  }
+
+  showRate();
+  rateSlider.addEventListener('input', showRate);
+  rateSlider.addEventListener('change', () => { if (speaking) speakLine(); });
+
+  loopChk.addEventListener('change', () => {
+    if (loopChk.checked) { if (!speaking) speakLine(); }
+    else clearTimeout(loopTimer);   // the line in progress finishes, then it stops
   });
+
+  speakBtn.addEventListener('click', () => { speaking ? stopSpeaking() : speakLine(); });
+  window.addEventListener('beforeunload', () => { if (ttsOK) synth.cancel(); });
+
+  if (ttsOK) {
+    pickVoice();
+    synth.onvoiceschanged = pickVoice;
+  } else {
+    speakBtn.disabled = true;
+    loopChk.disabled = true;
+    speakBtn.title = '這個瀏覽器不支援朗讀 / This browser has no speech synthesis.';
+  }
 })();
 </script>
 </body>
